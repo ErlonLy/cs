@@ -1,291 +1,57 @@
-use serde::{Deserialize, Serialize};
-
-#[allow(non_snake_case)]
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
-pub struct Offsets {
-    // client.dll base offsets
-    pub dwLocalPlayerPawn: usize,
-    pub dwLocalPlayerController: usize,
-    pub dwEntityList: usize,
-    pub dwViewMatrix: usize,
-    pub dwPlantedC4: usize,
-
-    // entity / controller fields
-    pub m_iHealth: usize,
-    pub m_iTeamNum: usize,
-    pub m_vOldOrigin: usize,
-    pub m_hPlayerPawn: usize,
-    pub m_pGameSceneNode: usize,
-    pub m_ArmorValue: usize,
-    pub m_pClippingWeapon: usize,
-    pub m_szName: usize,
-    pub m_iAccount: usize,
-    pub m_pInGameMoneyServices: usize,
-    pub m_iszPlayerName: usize,
-    pub m_hController: usize,
-    pub m_flFlashOverlayAlpha: usize,
-    pub m_bIsDefusing: usize,
-    pub m_vecAbsOrigin: usize,
-    pub m_flC4Blow: usize,
-    pub m_flTimerLength: usize,
-    pub m_iIDEntIndex: usize,
-    pub m_angEyeAngles: usize,
-    pub m_vecViewOffset: usize,
-    pub m_entitySpottedState: usize,
-    pub m_bSpottedByMask: usize,
-    pub m_modelState: usize,
-
-    // glow
-    pub m_Glow: usize,
-    pub m_iGlowType: usize,
-    pub m_nGlowRange: usize,
-    pub m_glowColorOverride: usize,
-    pub m_bGlowing: usize,
-
-    // weapon related
-    pub m_AttributeManager: usize,
-    pub m_Item: usize,
-    pub m_iItemDefinitionIndex: usize,
-}
-
-impl Offsets {
-    pub fn fetch() -> Self {
-        let urls = [
-            (
-                "offsets",
-                "https://github.com/a2x/cs2-dumper/raw/refs/heads/main/output/offsets.json",
-            ),
-            (
-                "client",
-                "https://github.com/a2x/cs2-dumper/raw/refs/heads/main/output/client_dll.json",
-            ),
-        ];
-
-        let mut offsets = Self::default();
-
-        // =================== OFFSET JSON ===================
-        if let Ok(resp) = reqwest::blocking::get(urls[0].1) {
-            if let Ok(json) = resp.json::<serde_json::Value>() {
-                if let Some(client) = json.get("client.dll") {
-                    offsets.dwLocalPlayerPawn = client
-                        .get("dwLocalPlayerPawn")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0) as usize;
-                    offsets.dwLocalPlayerController = client
-                        .get("dwLocalPlayerController")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0) as usize;
-                    offsets.dwEntityList = client
-                        .get("dwEntityList")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0) as usize;
-                    offsets.dwViewMatrix = client
-                        .get("dwViewMatrix")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0) as usize;
-                    offsets.dwPlantedC4 = client
-                        .get("dwPlantedC4")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0) as usize;
-                }
-            }
-        }
-
-        // =================== CLIENT DLL JSON ===================
-        if let Ok(resp) = reqwest::blocking::get(urls[1].1) {
-            if let Ok(json) = resp.json::<serde_json::Value>() {
-                if let Some(classes) =
-                    json.get("client.dll").and_then(|v| v.get("classes"))
-                {
-                    let get_field = |class: &str, field: &str| -> usize {
-                        classes
-                            .get(class)
-                            .and_then(|c| c.get("fields"))
-                            .and_then(|f| f.get(field))
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0) as usize
-                    };
-
-                    // base entity
-                    offsets.m_iHealth = get_field("C_BaseEntity", "m_iHealth");
-                    offsets.m_iTeamNum = get_field("C_BaseEntity", "m_iTeamNum");
-                    offsets.m_pGameSceneNode =
-                        get_field("C_BaseEntity", "m_pGameSceneNode");
-
-                    // Origin
-                    offsets.m_vOldOrigin =
-                        get_field("C_BasePlayerPawn", "m_vOldOrigin");
-                    if offsets.m_vOldOrigin == 0 {
-                        offsets.m_vOldOrigin =
-                            get_field("C_CSPlayerPawn", "m_vOldOrigin");
-                    }
-                    if offsets.m_vOldOrigin == 0 {
-                        offsets.m_vOldOrigin =
-                            get_field("C_BaseEntity", "m_vOldOrigin");
-                    }
-
-                    // Controller handle
-                    offsets.m_hController =
-                        get_field("C_BasePlayerPawn", "m_hController");
-                    if offsets.m_hController == 0 {
-                        offsets.m_hController =
-                            get_field("C_CSPlayerPawn", "m_hController");
-                    }
-                    if offsets.m_hController == 0 {
-                        offsets.m_hController =
-                            get_field("C_BaseEntity", "m_hController");
-                    }
-
-                    // CS specific
-                    offsets.m_ArmorValue =
-                        get_field("C_CSPlayerPawn", "m_ArmorValue");
-                    offsets.m_bIsDefusing =
-                        get_field("C_CSPlayerPawn", "m_bIsDefusing");
-                    offsets.m_pClippingWeapon =
-                        get_field("C_CSPlayerPawn", "m_pClippingWeapon");
-
-                    // crosshair target
-                    offsets.m_iIDEntIndex =
-                        get_field("C_CSPlayerPawn", "m_iIDEntIndex");
-                    if offsets.m_iIDEntIndex == 0 {
-                        offsets.m_iIDEntIndex =
-                            get_field("C_CSPlayerPawnBase", "m_iIDEntIndex");
-                    }
-                    if offsets.m_iIDEntIndex == 0 {
-                        offsets.m_iIDEntIndex = 0x3EAC; // fallback
-                    }
-
-                    // flash / view
-                    offsets.m_flFlashOverlayAlpha = get_field(
-                        "C_CSPlayerPawnBase",
-                        "m_flFlashOverlayAlpha",
-                    );
-
-                    offsets.m_hPlayerPawn =
-                        get_field("CCSPlayerController", "m_hPlayerPawn");
-                    offsets.m_pInGameMoneyServices =
-                        get_field("CCSPlayerController", "m_pInGameMoneyServices");
-                    offsets.m_iszPlayerName =
-                        get_field("CBasePlayerController", "m_iszPlayerName");
-                    offsets.m_iAccount = get_field(
-                        "CCSPlayerController_InGameMoneyServices",
-                        "m_iAccount",
-                    );
-                    offsets.m_vecAbsOrigin =
-                        get_field("CGameSceneNode", "m_vecAbsOrigin");
-                    offsets.m_flC4Blow =
-                        get_field("C_PlantedC4", "m_flC4Blow");
-                    offsets.m_flTimerLength =
-                        get_field("C_PlantedC4", "m_flTimerLength");
-
-                    // view
-                    offsets.m_angEyeAngles =
-                        get_field("C_CSPlayerPawn", "m_angEyeAngles");
-
-                    offsets.m_vecViewOffset =
-                        get_field("C_BaseModelEntity", "m_vecViewOffset");
-                    if offsets.m_vecViewOffset == 0 {
-                        offsets.m_vecViewOffset =
-                            get_field("C_BasePlayerPawn", "m_vecViewOffset");
-                    }
-                    if offsets.m_vecViewOffset == 0 {
-                        offsets.m_vecViewOffset =
-                            get_field("C_CSPlayerPawn", "m_vecViewOffset");
-                    }
-
-                    // spotted
-                    offsets.m_entitySpottedState =
-                        get_field("C_CSPlayerPawn", "m_entitySpottedState");
-                    offsets.m_bSpottedByMask =
-                        get_field("EntitySpottedState_t", "m_bSpottedByMask");
-
-                    // skeleton
-                    offsets.m_modelState =
-                        get_field("CSkeletonInstance", "m_modelState");
-                    if offsets.m_modelState == 0 {
-                        offsets.m_modelState = 0x160; // fallback
-                    }
-
-                    // glow
-                    offsets.m_Glow =
-                        get_field("C_BaseModelEntity", "m_Glow");
-                    if offsets.m_Glow == 0 {
-                        offsets.m_Glow = 0xCC0;
-                    }
-
-                    if let Some(glow_fields) = classes
-                        .get("CGlowProperty")
-                        .and_then(|c| c.get("fields"))
-                    {
-                        offsets.m_iGlowType = glow_fields
-                            .get("m_iGlowType")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0x30) as usize;
-                        offsets.m_nGlowRange = glow_fields
-                            .get("m_nGlowRange")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0x38) as usize;
-                        offsets.m_glowColorOverride = glow_fields
-                            .get("m_glowColorOverride")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0x40) as usize;
-                        offsets.m_bGlowing = glow_fields
-                            .get("m_bGlowing")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0x51) as usize;
-                    } else {
-                        offsets.m_iGlowType = 0x30;
-                        offsets.m_nGlowRange = 0x38;
-                        offsets.m_glowColorOverride = 0x40;
-                        offsets.m_bGlowing = 0x51;
-                    }
-
-                    // weapon offsets
-                    let weapon_class = "C_WeaponCSBaseGun";
-                    offsets.m_AttributeManager =
-                        get_field(weapon_class, "m_AttributeManager");
-                    if offsets.m_AttributeManager == 0 {
-                        offsets.m_AttributeManager =
-                            get_field("C_EconEntity", "m_AttributeManager");
-                    }
-
-                    // m_Item fica em C_AttributeContainer, parent de CAttributeManager
-                    offsets.m_Item =
-                        get_field("C_AttributeContainer", "m_Item");
-                    if offsets.m_Item == 0 {
-                        offsets.m_Item = 0x50; // fallback, bate com o JSON (80 decimal)
-                    }
-
-                    offsets.m_iItemDefinitionIndex = get_field(
-                        "C_EconItemView",
-                        "m_iItemDefinitionIndex",
-                    );
-
-                    if offsets.m_iItemDefinitionIndex == 0 {
-                        println!(
-                            "[!] m_iItemDefinitionIndex missing in dumper JSON"
-                        );
-                    }
-                }
-            }
-        }
-
-        println!("=== OFFSET DEBUG ===");
-        println!("[+] Health: 0x{:X}", offsets.m_iHealth);
-        println!("[+] TeamNum: 0x{:X}", offsets.m_iTeamNum);
-        println!("[+] OldOrigin: 0x{:X}", offsets.m_vOldOrigin);
-        println!("[+] ViewOffset: 0x{:X}", offsets.m_vecViewOffset);
-        println!("[+] PlayerPawn (Local): 0x{:X}", offsets.m_hPlayerPawn);
-        println!("[+] GameSceneNode: 0x{:X}", offsets.m_pGameSceneNode);
-        println!("[+] Glow: 0x{:X}", offsets.m_Glow);
-        println!("[+] Weapon AttributeManager: 0x{:X}", offsets.m_AttributeManager);
-        println!("[+] Weapon Item: 0x{:X}", offsets.m_Item);
-        println!(
-            "[+] Weapon DefIndex: 0x{:X}",
-            offsets.m_iItemDefinitionIndex
-        );
-        println!("====================");
-
-        offsets
-    }
+{
+  "client.dll": {
+    "dwCSGOInput": 36794432,
+    "dwEntityList": 38453928,
+    "dwGameEntitySystem": 38453928,
+    "dwGameEntitySystem_highestEntityIndex": 8352,
+    "dwGameRules": 36745056,
+    "dwGlobalVars": 33928640,
+    "dwGlowManager": 36732264,
+    "dwLocalPlayerController": 36639240,
+    "dwLocalPlayerPawn": 33975136,
+    "dwPlantedC4": 36784064,
+    "dwPrediction": 33974896,
+    "dwSensitivity": 36735096,
+    "dwSensitivity_sensitivity": 88,
+    "dwViewAngles": 36796104,
+    "dwViewMatrix": 36753312,
+    "dwViewRender": 36754360,
+    "dwWeaponC4": 36267024
+  },
+  "engine2.dll": {
+    "dwBuildNumber": 6346004,
+    "dwNetworkGameClient": 9471232,
+    "dwNetworkGameClient_clientTickCount": 888,
+    "dwNetworkGameClient_deltaTick": 588,
+    "dwNetworkGameClient_isBackgroundMap": 2888735,
+    "dwNetworkGameClient_localPlayer": 248,
+    "dwNetworkGameClient_maxClients": 576,
+    "dwNetworkGameClient_serverTickCount": 588,
+    "dwNetworkGameClient_signOnState": 560,
+    "dwWindowHeight": 9488556,
+    "dwWindowWidth": 9488552
+  },
+  "filesystem_stdio.dll": {
+    "dwVFS": 2180832
+  },
+  "inputsystem.dll": {
+    "dwInputSystem": 285392
+  },
+  "matchmaking.dll": {
+    "dwGameTypes": 1802240
+  },
+  "materialsystem2.dll": {
+    "dwShaderSystem": 1452800,
+    "dwTextureDict": 1361168
+  },
+  "server.dll": {
+    "dwServerTools": 30918224
+  },
+  "soundsystem.dll": {
+    "dwSoundSystem": 5190768,
+    "dwSoundSystem_engineViewData": 124
+  },
+  "tier0.dll": {
+    "dwTier0": 3758208
+  }
 }
